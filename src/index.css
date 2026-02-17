@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* Leaflet container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  font-family: inherit;
+}
+
+/* Custom node icons - remove default leaflet styling */
+.custom-node-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-node-icon div {
+  transition: transform 0.15s ease;
+}
+
+.custom-node-icon:hover div:first-child {
+  transform: scale(1.15);
+}
+
+.pipe-label {
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+/* Leaflet tooltip styling */
+.leaflet-tooltip {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Fix leaflet controls z-index */
+.leaflet-control-container {
+  z-index: 500 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 500 !important;
+}
+
+/* Make sure our overlays are above the map */
+.leaflet-pane {
+  z-index: 400;
+}
+
+/* Polyline hover effect */
+.leaflet-interactive:hover {
+  stroke-opacity: 1 !important;
+  stroke-width: 7 !important;
+}
