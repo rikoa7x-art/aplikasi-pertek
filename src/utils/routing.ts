@@ -4,6 +4,8 @@
  * Falls back to straight line if routing fails.
  */
 
+import { calculateDistance } from './calculations';
+
 export interface RouteResult {
   coordinates: [number, number][]; // [lat, lng][]
   distance: number; // meters (road distance)
@@ -62,7 +64,7 @@ export async function getRoute(
         [startLat, startLng],
         [endLat, endLng],
       ],
-      distance: calculateHaversineDistance(startLat, startLng, endLat, endLng),
+      distance: calculateDistance(startLat, startLng, endLat, endLng),
       duration: 0,
       success: false,
     };
@@ -75,7 +77,7 @@ export async function getRoute(
 export function calculateRouteDistance(coordinates: [number, number][]): number {
   let total = 0;
   for (let i = 0; i < coordinates.length - 1; i++) {
-    total += calculateHaversineDistance(
+    total += calculateDistance(
       coordinates[i][0],
       coordinates[i][1],
       coordinates[i + 1][0],
@@ -83,27 +85,4 @@ export function calculateRouteDistance(coordinates: [number, number][]): number 
     );
   }
   return total;
-}
-
-function calculateHaversineDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371000;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRad(deg: number): number {
-  return deg * (Math.PI / 180);
 }

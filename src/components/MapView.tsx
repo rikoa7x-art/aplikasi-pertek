@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { ACCESSORY_CATALOG } from '../types';
-import type { PipeNode, Pipe, DrawMode } from '../types';
+import type { PipeNode, Pipe, Pump, DrawMode } from '../types';
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)['_getIconUrl'];
@@ -14,32 +14,36 @@ L.Icon.Default.mergeOptions({
 interface MapViewProps {
   nodes: PipeNode[];
   pipes: Pipe[];
+  pumps: Pump[];
   drawMode: DrawMode;
   selectedNodeId: string | null;
   selectedPipeId: string | null;
+  selectedPumpId: string | null;
   pipeStartNodeId: string | null;
-  pipeWaypoints: string[]; // Array of node IDs for multi-node routing
+  pipeWaypoints: string[];
   onMapClick: (lat: number, lng: number) => void;
   onNodeClick: (nodeId: string) => void;
   onNodeDrag: (nodeId: string, lat: number, lng: number) => void;
   onPipeClick: (pipeId: string, latlng?: { lat: number; lng: number }) => void;
+  onPumpClick: (pumpId: string) => void;
+  onMouseMove?: (lat: number, lng: number) => void;
   mapCenter: [number, number];
   mapZoom: number;
   hideJunctions: boolean;
+  manualPathPoints: [number, number][];
+  zoomToFitTrigger?: number;
 }
 
 const nodeColors: Record<string, string> = {
   junction: '#3B82F6',
   reservoir: '#10B981',
   tank: '#8B5CF6',
-  pump: '#F59E0B',
 };
 
 const nodeSymbols: Record<string, string> = {
   junction: '',
   reservoir: '💧',
   tank: '🏗️',
-  pump: '⚡',
 };
 
 function createNodeIcon(node: PipeNode, isSelected: boolean, isPipeStart: boolean, zoom: number = 15): L.DivIcon {
@@ -128,23 +132,33 @@ function createNodeIcon(node: PipeNode, isSelected: boolean, isPipeStart: boolea
 export function MapView({
   nodes,
   pipes,
+  pumps,
   drawMode,
   selectedNodeId,
   selectedPipeId,
+  selectedPumpId,
   pipeStartNodeId,
   pipeWaypoints,
   onMapClick,
   onNodeClick,
   onNodeDrag,
   onPipeClick,
+  onPumpClick,
+  onMouseMove,
   mapCenter,
   mapZoom,
   hideJunctions,
+  manualPathPoints,
+  zoomToFitTrigger,
 }: MapViewProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const polylinesRef = useRef<Map<string, L.Polyline>>(new Map());
+  const pumpPolylinesRef = useRef<Map<string, L.Polyline>>(new Map());
+  const pumpLabelsRef = useRef<Map<string, L.Marker>>(new Map());
+  const manualPathRef = useRef<L.Polyline | null>(null);
+  const manualMarkersRef = useRef<L.CircleMarker[]>([]);
   const zoomRef = useRef<number>(mapZoom);
   const labelsRef = useRef<Map<string, L.Marker>>(new Map());
 
@@ -153,11 +167,15 @@ export function MapView({
   const onNodeClickRef = useRef(onNodeClick);
   const onNodeDragRef = useRef(onNodeDrag);
   const onPipeClickRef = useRef(onPipeClick);
+  const onPumpClickRef = useRef(onPumpClick);
+  const onMouseMoveRef = useRef(onMouseMove);
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
   useEffect(() => { onNodeDragRef.current = onNodeDrag; }, [onNodeDrag]);
   useEffect(() => { onPipeClickRef.current = onPipeClick; }, [onPipeClick]);
+  useEffect(() => { onPumpClickRef.current = onPumpClick; }, [onPumpClick]);
+  useEffect(() => { onMouseMoveRef.current = onMouseMove; }, [onMouseMove]);
 
   // Initialize map - only once
   useEffect(() => {
@@ -199,6 +217,11 @@ export function MapView({
       onMapClickRef.current(e.latlng.lat, e.latlng.lng);
     });
 
+    // Mouse move handler for live coordinate tracking
+    map.on('mousemove', (e: L.LeafletMouseEvent) => {
+      onMouseMoveRef.current?.(e.latlng.lat, e.latlng.lng);
+    });
+
     mapRef.current = map;
 
     // Zoom-end: refresh all node marker icons to scale with zoom
@@ -226,6 +249,14 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Zoom to fit all nodes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !zoomToFitTrigger || nodes.length === 0) return;
+
+    const bounds = L.latLngBounds(nodes.map(n => [n.lat, n.lng] as L.LatLngTuple));
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+  }, [zoomToFitTrigger, nodes]);
   // Update cursor based on draw mode
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -540,6 +571,173 @@ export function MapView({
     };
   }, [pipeWaypoints, nodes]);
 
+  // Draw manual path preview
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear old manual path preview
+    if (manualPathRef.current) {
+      manualPathRef.current.remove();
+      manualPathRef.current = null;
+    }
+    manualMarkersRef.current.forEach(m => m.remove());
+    manualMarkersRef.current = [];
+
+    if (manualPathPoints.length === 0 && !pipeStartNodeId) return;
+
+    // Build the path: startNode -> manualPathPoints
+    const startNode = pipeStartNodeId ? nodes.find(n => n.id === pipeStartNodeId) : null;
+    if (!startNode) return;
+
+    const pathCoords: L.LatLngExpression[] = [
+      [startNode.lat, startNode.lng],
+      ...manualPathPoints.map(([lat, lng]) => [lat, lng] as L.LatLngExpression),
+    ];
+
+    if (pathCoords.length >= 2) {
+      const previewLine = L.polyline(pathCoords, {
+        color: '#10B981',
+        weight: 4,
+        opacity: 0.8,
+        dashArray: '8, 6',
+        lineJoin: 'round',
+        lineCap: 'round',
+      });
+      previewLine.addTo(map);
+      manualPathRef.current = previewLine;
+    }
+
+    // Draw small circles at each manual point
+    manualPathPoints.forEach(([lat, lng], i) => {
+      const circle = L.circleMarker([lat, lng], {
+        radius: 5,
+        color: '#10B981',
+        fillColor: '#fff',
+        fillOpacity: 1,
+        weight: 2,
+      });
+      circle.bindTooltip(`Titik ${i + 1}`, { direction: 'top', offset: [0, -8] });
+      circle.addTo(map);
+      manualMarkersRef.current.push(circle);
+    });
+
+    return () => {
+      if (manualPathRef.current) {
+        manualPathRef.current.remove();
+        manualPathRef.current = null;
+      }
+      manualMarkersRef.current.forEach(m => m.remove());
+      manualMarkersRef.current = [];
+    };
+  }, [manualPathPoints, pipeStartNodeId, nodes]);
+
+  // Sync pump polylines
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const currentPumpIds = new Set(pumps.map(p => p.id));
+
+    // Remove old pump polylines and labels
+    pumpPolylinesRef.current.forEach((polyline, id) => {
+      if (!currentPumpIds.has(id)) {
+        polyline.remove();
+        pumpPolylinesRef.current.delete(id);
+      }
+    });
+    pumpLabelsRef.current.forEach((label, id) => {
+      if (!currentPumpIds.has(id)) {
+        label.remove();
+        pumpLabelsRef.current.delete(id);
+      }
+    });
+
+    pumps.forEach(pump => {
+      const startNode = nodes.find(n => n.id === pump.startNodeId);
+      const endNode = nodes.find(n => n.id === pump.endNodeId);
+      if (!startNode || !endNode) return;
+
+      const latlngs: L.LatLngExpression[] = [
+        [startNode.lat, startNode.lng],
+        [endNode.lat, endNode.lng],
+      ];
+
+      const isSelected = pump.id === selectedPumpId;
+      const color = isSelected ? '#EF4444' : (pump.status === 'off' ? '#9CA3AF' : '#F59E0B');
+      const weight = isSelected ? 7 : 5;
+
+      const existingPolyline = pumpPolylinesRef.current.get(pump.id);
+      if (existingPolyline) {
+        existingPolyline.setLatLngs(latlngs);
+        existingPolyline.setStyle({ color, weight, dashArray: '12, 8' });
+        existingPolyline.unbindTooltip();
+        existingPolyline.bindTooltip(buildPumpTooltip(pump, startNode, endNode), { sticky: true });
+      } else {
+        const polyline = L.polyline(latlngs, {
+          color,
+          weight,
+          opacity: 0.9,
+          dashArray: '12, 8',
+          lineJoin: 'round',
+          lineCap: 'round',
+        });
+
+        const pumpId = pump.id;
+        polyline.on('click', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          onPumpClickRef.current(pumpId);
+        });
+
+        polyline.bindTooltip(buildPumpTooltip(pump, startNode, endNode), { sticky: true });
+        polyline.addTo(map);
+        pumpPolylinesRef.current.set(pump.id, polyline);
+      }
+
+      // Pump label at midpoint
+      const midLat = (startNode.lat + endNode.lat) / 2;
+      const midLng = (startNode.lng + endNode.lng) / 2;
+
+      const labelHtml = `<div style="
+        background: ${pump.status === 'off' ? '#9CA3AF' : '#F59E0B'};
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+        white-space: nowrap;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        pointer-events: none;
+        border: 2px solid ${isSelected ? '#EF4444' : 'white'};
+      ">⚡ ${pump.label}</div>`;
+
+      const existingLabel = pumpLabelsRef.current.get(pump.id);
+      if (existingLabel) {
+        existingLabel.setLatLng([midLat, midLng]);
+        existingLabel.setIcon(L.divIcon({
+          className: 'pump-label',
+          html: labelHtml,
+          iconSize: [100, 24],
+          iconAnchor: [50, 12],
+        }));
+      } else {
+        const labelIcon = L.divIcon({
+          className: 'pump-label',
+          html: labelHtml,
+          iconSize: [100, 24],
+          iconAnchor: [50, 12],
+        });
+        const label = L.marker([midLat, midLng], {
+          icon: labelIcon,
+          interactive: false,
+          zIndexOffset: 600,
+        });
+        label.addTo(map);
+        pumpLabelsRef.current.set(pump.id, label);
+      }
+    });
+  }, [pumps, nodes, selectedPumpId]);
+
   return (
     <div
       ref={mapContainerRef}
@@ -554,7 +752,6 @@ function buildNodeTooltip(node: PipeNode): string {
     junction: 'Junction',
     reservoir: 'Reservoir',
     tank: 'Tanki',
-    pump: 'Pompa',
   };
   let html = `<b>${node.label}</b> (${typeLabels[node.type] || node.type})<br/>`;
   html += `Elevasi: <b>${node.elevation.toFixed(1)} mdpl</b><br/>`;
@@ -596,6 +793,24 @@ function buildPipeTooltip(pipe: Pipe, startNode: PipeNode, endNode: PipeNode): s
   }
   if (pipe.headloss !== undefined) {
     html += `<br/>Headloss: <b>${pipe.headloss.toFixed(3)} m</b>`;
+  }
+  return html;
+}
+
+function buildPumpTooltip(pump: Pump, startNode: PipeNode, endNode: PipeNode): string {
+  let html = `<b>⚡ ${pump.label}</b> (Pompa)<br/>`;
+  html += `${startNode.label} → ${endNode.label}<br/>`;
+  html += `Status: <b style="color:${pump.status === 'on' ? 'green' : 'red'}">${pump.status === 'on' ? 'ON' : 'OFF'}</b><br/>`;
+  html += `Design: ${pump.designFlow} L/s @ ${pump.designHead} m<br/>`;
+  html += `Speed: ${(pump.speed * 100).toFixed(0)}%`;
+  if (pump.flowRate !== undefined && pump.flowRate > 0) {
+    html += `<br/>Debit: <b>${pump.flowRate.toFixed(3)} L/s</b>`;
+  }
+  if (pump.headGain !== undefined && pump.headGain > 0) {
+    html += `<br/>Head Gain: <b>${pump.headGain.toFixed(2)} m</b>`;
+  }
+  if (pump.power !== undefined && pump.power > 0) {
+    html += `<br/>Daya: <b>${pump.power.toFixed(2)} kW</b>`;
   }
   return html;
 }

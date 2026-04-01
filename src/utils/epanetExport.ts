@@ -1,10 +1,10 @@
-import type { PipeNode, Pipe } from '../types';
+import type { PipeNode, Pipe, Pump } from '../types';
 
 /**
  * Export pipe network to EPANET INP format
  * This generates a valid .inp file that can be opened in EPANET 2.x
  */
-export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
+export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[], pumps: Pump[] = []): string {
     const lines: string[] = [];
 
     // Create short node IDs for EPANET compatibility
@@ -31,6 +31,14 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
         pipeIdMap.set(pipe.id, `P${index + 1}`);
     });
 
+    // Create short pump IDs and curve IDs
+    const pumpIdMap = new Map<string, string>();
+    const pumpCurveMap = new Map<string, string>();
+    pumps.forEach((pump, index) => {
+        pumpIdMap.set(pump.id, `PMP${index + 1}`);
+        pumpCurveMap.set(pump.id, `PUMP${index + 1}`);
+    });
+
     // ── [TITLE] ──
     lines.push('[TITLE]');
     lines.push(`PDAM Pipe Network - Exported ${new Date().toISOString().slice(0, 19)}`);
@@ -41,7 +49,7 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
     lines.push('[JUNCTIONS]');
     lines.push(';ID             \tElev          \tDemand        \tPattern');
     nodes.forEach(node => {
-        if (node.type === 'junction' || node.type === 'pump') {
+        if (node.type === 'junction') {
             const id = nodeIdMap.get(node.id) || '';
             const elev = node.elevation.toFixed(2);
             const demand = (node.demand || 0).toFixed(4);
@@ -92,9 +100,20 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
     });
     lines.push('');
 
-    // ── [PUMPS] ── (empty but required)
+    // ── [PUMPS] ──
     lines.push('[PUMPS]');
     lines.push(';ID             \tNode1          \tNode2          \tParameters');
+    pumps.forEach(pump => {
+        const id = pumpIdMap.get(pump.id) || '';
+        const node1 = nodeIdMap.get(pump.startNodeId) || '';
+        const node2 = nodeIdMap.get(pump.endNodeId) || '';
+        const curveId = pumpCurveMap.get(pump.id) || '';
+        let params = `HEAD ${curveId}`;
+        if (pump.speed !== 1.0) {
+            params += ` SPEED ${pump.speed.toFixed(2)}`;
+        }
+        lines.push(` ${id.padEnd(16)}\t${node1.padEnd(15)}\t${node2.padEnd(15)}\t${params}`);
+    });
     lines.push('');
 
     // ── [VALVES] ── (map accessories)
@@ -114,6 +133,12 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
     // ── [STATUS] ──
     lines.push('[STATUS]');
     lines.push(';ID             \tStatus/Setting');
+    pumps.forEach(pump => {
+        const id = pumpIdMap.get(pump.id) || '';
+        if (pump.status === 'off') {
+            lines.push(` ${id.padEnd(16)}\tClosed`);
+        }
+    });
     lines.push('');
 
     // ── [PATTERNS] ──
@@ -124,6 +149,18 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
     // ── [CURVES] ──
     lines.push('[CURVES]');
     lines.push(';ID             \tX-Value       \tY-Value');
+    lines.push('');
+
+    // ── [CURVES] ──
+    lines.push('[CURVES]');
+    lines.push(';ID             \tX-Value       \tY-Value');
+    pumps.forEach(pump => {
+        const curveId = pumpCurveMap.get(pump.id) || '';
+        // EPANET pump curve: flow (LPS) vs head (m)
+        pump.pumpCurve.forEach(point => {
+            lines.push(` ${curveId.padEnd(16)}\t${point.flow.toFixed(4).padEnd(14)}\t${point.head.toFixed(4)}`);
+        });
+    });
     lines.push('');
 
     // ── [CONTROLS] ──
@@ -291,8 +328,8 @@ export function generateEpanetINP(nodes: PipeNode[], pipes: Pipe[]): string {
 /**
  * Trigger download of INP file
  */
-export function downloadINP(nodes: PipeNode[], pipes: Pipe[]): void {
-    const content = generateEpanetINP(nodes, pipes);
+export function downloadINP(nodes: PipeNode[], pipes: Pipe[], pumps: Pump[] = []): void {
+    const content = generateEpanetINP(nodes, pipes, pumps);
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

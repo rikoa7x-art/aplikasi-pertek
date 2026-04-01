@@ -10,11 +10,19 @@ interface ToolbarProps {
   onExport: () => void;
   onExportINP: () => void;
   onImport: () => void;
+  onSaveProject: () => void;
   isAnalyzing: boolean;
   hideJunctions: boolean;
   onToggleHideJunctions: () => void;
   selectedAccessoryType: AccessoryType;
   onSelectAccessoryType: (type: AccessoryType) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onZoomToFit: () => void;
+  onShowShortcuts: () => void;
+  onPrintResults: () => void;
 }
 
 const tools: { mode: DrawMode; label: string; icon: string; shortLabel: string; description: string }[] = [
@@ -34,11 +42,19 @@ export function Toolbar({
   onExport,
   onExportINP,
   onImport,
+  onSaveProject,
   isAnalyzing,
   hideJunctions,
   onToggleHideJunctions,
   selectedAccessoryType,
   onSelectAccessoryType,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  onZoomToFit,
+  onShowShortcuts,
+  onPrintResults,
 }: ToolbarProps) {
   const [showAccessoryDropdown, setShowAccessoryDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -58,17 +74,17 @@ export function Toolbar({
   const categories = Array.from(new Set(ACCESSORY_CATALOG.map(a => a.category)));
 
   return (
-    <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center gap-1 flex-wrap shadow-sm">
+    <div className="toolbar-glass px-3 py-2 flex items-center gap-1 flex-wrap shadow-sm">
       {/* Drawing tools */}
-      <div className="flex items-center gap-1 border-r border-gray-200 pr-3 mr-2">
+      <div className="flex items-center gap-1 border-r border-gray-200/70 pr-3 mr-2">
         {tools.map(tool => (
           <button
             key={tool.mode}
             onClick={() => onSetDrawMode(tool.mode)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all
               ${drawMode === tool.mode
-                ? 'bg-blue-600 text-white shadow-md scale-105'
-                : 'bg-gray-50 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25 scale-[1.03] ring-2 ring-blue-400/30'
+                : 'bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
               }`}
             title={tool.description}
           >
@@ -85,10 +101,10 @@ export function Toolbar({
               onSetDrawMode('accessory');
               setShowAccessoryDropdown(!showAccessoryDropdown);
             }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all
               ${drawMode === 'accessory'
-                ? 'bg-orange-500 text-white shadow-md scale-105'
-                : 'bg-gray-50 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
+                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/25 scale-[1.03] ring-2 ring-orange-400/30'
+                : 'bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
               }`}
             title="Klik pada pipa untuk menambahkan aksesoris (Valve, Tee, dll)"
           >
@@ -103,7 +119,7 @@ export function Toolbar({
 
           {/* Accessory Dropdown */}
           {showAccessoryDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-[2000] overflow-hidden">
+            <div className="absolute top-full left-0 mt-1 w-72 bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-200/50 z-[2000] overflow-hidden animate-slideDown">
               <div className="px-3 py-2 bg-orange-50 border-b border-orange-100">
                 <p className="text-xs font-semibold text-orange-800">Pilih Jenis Aksesoris</p>
                 <p className="text-[10px] text-orange-600">Lalu klik pada garis pipa di peta</p>
@@ -145,10 +161,10 @@ export function Toolbar({
         {/* Delete tool */}
         <button
           onClick={() => onSetDrawMode('delete')}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all
             ${drawMode === 'delete'
-              ? 'bg-red-600 text-white shadow-md scale-105'
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
+              ? 'bg-red-600 text-white shadow-md shadow-red-500/25 scale-[1.03] ring-2 ring-red-400/30'
+              : 'bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
             }`}
           title="Klik node/pipa untuk menghapus"
         >
@@ -160,10 +176,10 @@ export function Toolbar({
         {/* Hide junctions toggle */}
         <button
           onClick={onToggleHideJunctions}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all
             ${hideJunctions
-              ? 'bg-indigo-600 text-white shadow-md'
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+              : 'bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm'
             }`}
           title={hideJunctions ? 'Tampilkan junction' : 'Sembunyikan junction'}
         >
@@ -172,30 +188,85 @@ export function Toolbar({
         </button>
       </div>
 
+      {/* Undo / Redo / Zoom / Shortcuts */}
+      <div className="flex items-center gap-1 border-r border-gray-200/70 pr-3 mr-2">
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          title="Undo (Ctrl+Z)"
+        >
+          <span className="text-base">↩️</span>
+          <span className="hidden xl:inline">Undo</span>
+        </button>
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          title="Redo (Ctrl+Y)"
+        >
+          <span className="text-base">↪️</span>
+          <span className="hidden xl:inline">Redo</span>
+        </button>
+        <button
+          onClick={onZoomToFit}
+          className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm transition-all"
+          title="Zoom ke semua node"
+        >
+          <span className="text-base">🗺️</span>
+          <span className="hidden xl:inline">Zoom Fit</span>
+        </button>
+        <button
+          onClick={onShowShortcuts}
+          className="flex items-center gap-1 px-2.5 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 hover:bg-gray-100 hover:shadow-sm transition-all"
+          title="Keyboard Shortcuts"
+        >
+          <span className="text-base">⌨️</span>
+        </button>
+      </div>
+
       {/* Action buttons */}
       <div className="flex items-center gap-1.5">
         <button
           onClick={onRunAnalysis}
           disabled={isAnalyzing}
-          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-all shadow-sm"
+          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-600/20 hover:shadow-green-600/30"
         >
           <span>▶️</span>
           <span className="hidden md:inline">{isAnalyzing ? 'Menganalisis...' : 'Analisis Hidrolik'}</span>
         </button>
 
-        <div className="border-l border-gray-200 pl-1.5 ml-1 flex items-center gap-1">
+        <button
+          onClick={onPrintResults}
+          className="flex items-center gap-1.5 px-3 py-2 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-all"
+          title="Cetak hasil analisis hidrolik"
+        >
+          <span>🖨️</span>
+          <span className="hidden md:inline">Cetak</span>
+        </button>
+
+        <div className="border-l border-gray-200/70 pl-1.5 ml-1 flex items-center gap-1">
           <button
-            onClick={onExport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-200 transition-all"
-            title="Export jaringan ke file JSON"
+            onClick={onSaveProject}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-100 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-200 transition-all"
+            title="Simpan proyek (JSON dengan nama proyek)"
           >
             <span>💾</span>
+            <span className="hidden md:inline">Save</span>
+          </button>
+
+          <button
+            onClick={onExport}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-100 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-200 transition-all"
+            title="Export jaringan ke file JSON"
+          >
+            <span>📤</span>
             <span className="hidden md:inline">Export</span>
           </button>
 
           <button
             onClick={onExportINP}
-            className="flex items-center gap-1.5 px-3 py-2 bg-teal-100 text-teal-700 rounded-lg text-sm font-medium hover:bg-teal-200 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 bg-teal-100 text-teal-700 rounded-xl text-sm font-medium hover:bg-teal-200 transition-all"
             title="Export ke format EPANET (.inp)"
           >
             <span>🔬</span>
@@ -204,8 +275,8 @@ export function Toolbar({
 
           <button
             onClick={onImport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-200 transition-all"
-            title="Import jaringan dari file JSON"
+            className="flex items-center gap-1.5 px-3 py-2 bg-purple-100 text-purple-700 rounded-xl text-sm font-medium hover:bg-purple-200 transition-all"
+            title="Import dari file JSON atau EPANET (.inp)"
           >
             <span>📂</span>
             <span className="hidden md:inline">Import</span>
@@ -213,7 +284,7 @@ export function Toolbar({
 
           <button
             onClick={onClearAll}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl text-sm font-medium hover:bg-red-200 transition-all"
             title="Hapus semua node dan pipa"
           >
             <span>🧹</span>

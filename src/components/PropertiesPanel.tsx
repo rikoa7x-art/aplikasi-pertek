@@ -1,17 +1,21 @@
 import { useState } from 'react';
 import { ACCESSORY_CATALOG } from '../types';
-import type { PipeNode, Pipe, AccessoryType } from '../types';
+import type { PipeNode, Pipe, Pump, AccessoryType } from '../types';
 import { PIPE_MATERIALS } from '../utils/calculations';
 
 interface PropertiesPanelProps {
   selectedNode: PipeNode | null;
   selectedPipe: Pipe | null;
+  selectedPump: Pump | null;
   nodes: PipeNode[];
   pipes: Pipe[];
+  pumps: Pump[];
   onUpdateNode: (node: PipeNode) => void;
   onUpdatePipe: (pipe: Pipe) => void;
+  onUpdatePump: (pump: Pump) => void;
   onDeleteNode: (nodeId: string) => void;
   onDeletePipe: (pipeId: string) => void;
+  onDeletePump: (pumpId: string) => void;
   onReroutePipe: (pipeId: string) => void;
   onRemoveAccessory: (nodeId: string, accessoryIndex: number) => void;
   onAddAccessoryToNode: (nodeId: string, accessoryType: AccessoryType) => void;
@@ -20,12 +24,16 @@ interface PropertiesPanelProps {
 export function PropertiesPanel({
   selectedNode,
   selectedPipe,
+  selectedPump,
   nodes,
   pipes,
+  pumps,
   onUpdateNode,
   onUpdatePipe,
+  onUpdatePump,
   onDeleteNode,
   onDeletePipe,
+  onDeletePump,
   onReroutePipe,
   onRemoveAccessory,
   onAddAccessoryToNode,
@@ -33,17 +41,17 @@ export function PropertiesPanel({
   const [activeTab, setActiveTab] = useState<'properties' | 'network' | 'results'>('properties');
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
+    <div className="w-80 panel-glass border-l border-gray-200/50 flex flex-col h-full overflow-hidden shadow-xl">
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200/70">
         {(['properties', 'network', 'results'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-all
               ${activeTab === tab
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/70'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
               }`}
           >
             {tab === 'properties' ? 'Properti' : tab === 'network' ? 'Jaringan' : 'Hasil'}
@@ -56,22 +64,26 @@ export function PropertiesPanel({
           <PropertiesTab
             selectedNode={selectedNode}
             selectedPipe={selectedPipe}
+            selectedPump={selectedPump}
             nodes={nodes}
             pipes={pipes}
+            pumps={pumps}
             onUpdateNode={onUpdateNode}
             onUpdatePipe={onUpdatePipe}
+            onUpdatePump={onUpdatePump}
             onDeleteNode={onDeleteNode}
             onDeletePipe={onDeletePipe}
+            onDeletePump={onDeletePump}
             onReroutePipe={onReroutePipe}
             onRemoveAccessory={onRemoveAccessory}
             onAddAccessoryToNode={onAddAccessoryToNode}
           />
         )}
         {activeTab === 'network' && (
-          <NetworkTab nodes={nodes} pipes={pipes} />
+          <NetworkTab nodes={nodes} pipes={pipes} pumps={pumps} />
         )}
         {activeTab === 'results' && (
-          <ResultsTab nodes={nodes} pipes={pipes} />
+          <ResultsTab nodes={nodes} pipes={pipes} pumps={pumps} />
         )}
       </div>
     </div>
@@ -81,24 +93,32 @@ export function PropertiesPanel({
 function PropertiesTab({
   selectedNode,
   selectedPipe,
+  selectedPump,
   nodes,
   pipes,
+  pumps: _pumps,
   onUpdateNode,
   onUpdatePipe,
+  onUpdatePump,
   onDeleteNode,
   onDeletePipe,
+  onDeletePump,
   onReroutePipe,
   onRemoveAccessory,
   onAddAccessoryToNode,
 }: {
   selectedNode: PipeNode | null;
   selectedPipe: Pipe | null;
+  selectedPump: Pump | null;
   nodes: PipeNode[];
   pipes: Pipe[];
+  pumps: Pump[];
   onUpdateNode: (node: PipeNode) => void;
   onUpdatePipe: (pipe: Pipe) => void;
+  onUpdatePump: (pump: Pump) => void;
   onDeleteNode: (nodeId: string) => void;
   onDeletePipe: (pipeId: string) => void;
+  onDeletePump: (pumpId: string) => void;
   onReroutePipe: (pipeId: string) => void;
   onRemoveAccessory: (nodeId: string, accessoryIndex: number) => void;
   onAddAccessoryToNode: (nodeId: string, accessoryType: AccessoryType) => void;
@@ -111,13 +131,14 @@ function PropertiesTab({
       p => p.startNodeId === selectedNode.id || p.endNodeId === selectedNode.id
     );
 
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
             {selectedNode.type === 'junction' ? '⚬ Junction' :
               selectedNode.type === 'reservoir' ? '💧 Reservoir' :
-                selectedNode.type === 'tank' ? '🏗️ Tanki' : '⚡ Pompa'}
+                '🏗️ Tanki'}
           </h3>
           <button
             onClick={() => onDeleteNode(selectedNode.id)}
@@ -238,8 +259,8 @@ function PropertiesTab({
                           {acc.size && <div className="text-[10px] text-gray-500">⌀{acc.size}mm</div>}
                           {acc.status && (
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${acc.status === 'open' ? 'bg-green-100 text-green-700' :
-                                acc.status === 'closed' ? 'bg-red-100 text-red-700' :
-                                  'bg-amber-100 text-amber-700'
+                              acc.status === 'closed' ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
                               }`}>
                               {acc.status === 'open' ? 'Terbuka' : acc.status === 'closed' ? 'Tertutup' : 'Sebagian'}
                             </span>
@@ -427,7 +448,7 @@ function PropertiesTab({
                 <label className="block text-xs font-medium text-blue-600 mb-1">Kecepatan Aliran</label>
                 <span className="text-lg font-bold text-blue-800">{selectedPipe.velocity?.toFixed(3)} m/s</span>
                 <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${(selectedPipe.velocity || 0) >= 0.3 && (selectedPipe.velocity || 0) <= 3.0
-                    ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                   }`}>
                   {(selectedPipe.velocity || 0) >= 0.3 && (selectedPipe.velocity || 0) <= 3.0 ? 'OK' : 'Perlu disesuaikan'}
                 </span>
@@ -447,10 +468,137 @@ function PropertiesTab({
     );
   }
 
+  // ── PUMP PROPERTIES ──
+  if (selectedPump) {
+    const startNode = nodes.find(n => n.id === selectedPump.startNodeId);
+    const endNode = nodes.find(n => n.id === selectedPump.endNodeId);
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">⚡ Pompa</h3>
+          <button
+            onClick={() => onDeletePump(selectedPump.id)}
+            className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200"
+          >🗑️ Hapus Pompa</button>
+        </div>
+
+        {/* Label */}
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">Label</label>
+          <input
+            type="text"
+            value={selectedPump.label}
+            onChange={e => onUpdatePump({ ...selectedPump, label: e.target.value })}
+            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+
+        {/* Connection */}
+        <div className="bg-amber-50 p-3 rounded-lg">
+          <label className="block text-[10px] font-medium text-amber-700 uppercase mb-1">Koneksi</label>
+          <p className="text-sm font-medium text-amber-900">
+            {startNode?.label || '?'} → {endNode?.label || '?'}
+          </p>
+        </div>
+
+        {/* Design Flow */}
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">Debit Desain (L/s)</label>
+          <input
+            type="number"
+            step="0.1"
+            min="0.01"
+            value={selectedPump.designFlow}
+            onChange={e => onUpdatePump({ ...selectedPump, designFlow: parseFloat(e.target.value) || 0 })}
+            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+
+        {/* Design Head */}
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">Head Desain (m)</label>
+          <input
+            type="number"
+            step="0.5"
+            min="0.1"
+            value={selectedPump.designHead}
+            onChange={e => onUpdatePump({ ...selectedPump, designHead: parseFloat(e.target.value) || 0 })}
+            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+
+        {/* Speed */}
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 uppercase mb-1">
+            Kecepatan Relatif: {(selectedPump.speed * 100).toFixed(0)}%
+          </label>
+          <input
+            type="range"
+            min="0.1"
+            max="1.5"
+            step="0.05"
+            value={selectedPump.speed}
+            onChange={e => onUpdatePump({ ...selectedPump, speed: parseFloat(e.target.value) })}
+            className="w-full accent-amber-500"
+          />
+        </div>
+
+        {/* Status */}
+        <div className="flex items-center gap-3">
+          <label className="block text-[10px] font-medium text-gray-500 uppercase">Status</label>
+          <button
+            onClick={() => onUpdatePump({ ...selectedPump, status: selectedPump.status === 'on' ? 'off' : 'on' })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedPump.status === 'on'
+              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+              }`}
+          >
+            {selectedPump.status === 'on' ? '✅ ON' : '❌ OFF'}
+          </button>
+        </div>
+
+        {/* Analysis Results */}
+        {selectedPump.flowRate !== undefined && selectedPump.flowRate > 0 && (
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-3 rounded-lg border border-amber-200">
+            <h4 className="text-[10px] font-bold text-amber-800 uppercase mb-2">Hasil Analisis</h4>
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Debit Operasi</span>
+                <span className="font-bold text-amber-800">{selectedPump.flowRate?.toFixed(3)} L/s</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Head Gain</span>
+                <span className="font-bold text-amber-800">{selectedPump.headGain?.toFixed(2)} m</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Daya</span>
+                <span className="font-bold text-amber-800">{selectedPump.power?.toFixed(2)} kW</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pump Curve Info */}
+        <div className="bg-gray-50 p-3 rounded-lg">
+          <h4 className="text-[10px] font-bold text-gray-600 uppercase mb-1">Kurva Pompa</h4>
+          <div className="text-[10px] text-gray-500 space-y-0.5">
+            {selectedPump.pumpCurve.map((pt, i) => (
+              <div key={i} className="flex justify-between">
+                <span>Q = {pt.flow} L/s</span>
+                <span>H = {pt.head} m</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="text-center text-gray-400 py-12">
       <div className="text-4xl mb-3">🖱️</div>
-      <p className="text-sm font-medium">Pilih node atau pipa</p>
+      <p className="text-sm font-medium">Pilih node, pipa, atau pompa</p>
       <p className="text-xs mt-1">untuk melihat dan mengedit properti</p>
       <div className="mt-6 text-left bg-orange-50 p-4 rounded-lg">
         <h4 className="text-xs font-bold text-orange-700 mb-2">💡 Tips: Menambah Percabangan</h4>
@@ -466,7 +614,7 @@ function PropertiesTab({
   );
 }
 
-function NetworkTab({ nodes, pipes }: { nodes: PipeNode[]; pipes: Pipe[] }) {
+function NetworkTab({ nodes, pipes, pumps: _pumps }: { nodes: PipeNode[]; pipes: Pipe[]; pumps: Pump[] }) {
   const totalLength = pipes.reduce((sum, p) => sum + p.length, 0);
   const totalStraight = pipes.reduce((sum, p) => sum + p.straightLength, 0);
   const routedPipes = pipes.filter(p => p.routeCoordinates && p.routeCoordinates.length > 2);
@@ -573,7 +721,7 @@ function NetworkTab({ nodes, pipes }: { nodes: PipeNode[]; pipes: Pipe[] }) {
   );
 }
 
-function ResultsTab({ nodes, pipes }: { nodes: PipeNode[]; pipes: Pipe[] }) {
+function ResultsTab({ nodes, pipes, pumps: _pumps }: { nodes: PipeNode[]; pipes: Pipe[]; pumps: Pump[] }) {
   const hasResults = pipes.some(p => p.flowRate !== undefined);
 
   if (!hasResults) {

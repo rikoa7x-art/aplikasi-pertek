@@ -28,7 +28,7 @@ export interface PipeNode {
   lat: number;
   lng: number;
   elevation: number; // meters above sea level (mdpl)
-  type: 'junction' | 'reservoir' | 'tank' | 'pump';
+  type: 'junction' | 'reservoir' | 'tank';
   label: string;
   demand?: number; // L/s
   pressure?: number; // m
@@ -51,11 +51,35 @@ export interface Pipe {
   routeCoordinates: [number, number][]; // Array of [lat, lng] from OSRM routing
 }
 
+// EPANET-style pump curve point
+export interface PumpCurvePoint {
+  flow: number;  // L/s
+  head: number;  // m
+}
+
+// EPANET-style pump — a LINK connecting two nodes (suction → discharge)
+export interface Pump {
+  id: string;
+  startNodeId: string;   // suction node (upstream)
+  endNodeId: string;      // discharge node (downstream)
+  label: string;
+  designFlow: number;     // L/s — design point flow
+  designHead: number;     // m — head gain at design point
+  speed: number;          // relative speed (1.0 = 100%)
+  status: 'on' | 'off';
+  pumpCurve: PumpCurvePoint[]; // Generated 3-point curve (shutoff, design, maxflow)
+  // Analysis results
+  flowRate?: number;      // L/s — actual operating flow
+  headGain?: number;      // m — actual head gain at operating point
+  power?: number;         // kW — power consumed
+}
+
 export type DrawMode = 'select' | 'node' | 'pipe' | 'reservoir' | 'tank' | 'pump' | 'delete' | 'accessory';
 
 export interface PipeNetwork {
   nodes: PipeNode[];
   pipes: Pipe[];
+  pumps: Pump[];
 }
 
 export interface ElevationResult {
